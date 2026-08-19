@@ -46,8 +46,6 @@ class AudioRecorder:
 
         # Callbacks
         self.on_quick_fragment = None  # callable(fragment_np) - transcripción en vivo
-        # callable(pendiente: bool) - se cierra un bloque por pausa larga
-        self.on_sentence_complete = None
         # callable(nivel: float 0.0-1.0) para el medidor de sonido en vivo
         self.on_volume_level = None
 
@@ -139,10 +137,6 @@ class AudioRecorder:
                     # streaming) para mantener el texto bruto al día.
                     if self.on_quick_fragment:
                         self.on_quick_fragment(fragmento)
-                    # Envío a la IA: SOLO al cerrarse un bloque por pausa
-                    # larga. La app enviará el texto bruto acumulado.
-                    if pausa_larga and self.on_sentence_complete:
-                        self.on_sentence_complete(pendiente=True)
             else:
                 # Transcripción rápida desactivada: no acumulamos frases
                 self.sentence_audio = np.zeros(0, dtype="float32")

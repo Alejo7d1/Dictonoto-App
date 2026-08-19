@@ -1,8 +1,8 @@
 """Controlador principal de Dictonoto.
 
 Orquesta la biblioteca, los libros/capítulos, la grabación de audio, la
-transcripción (rápida y completa) y la IA. Es el puente entre la UI y
-las capas de servicio.
+transcripción local en vivo y la IA (transcripción completa). Es el
+puente entre la UI y las capas de servicio.
 """
 import threading
 
@@ -25,6 +25,15 @@ PANEL = "#1e1e1e"
 ACCENTO = "#6c5ce7"
 TEXTO = "#e8e8e8"
 SUBTEXTO = "#9a9a9a"
+
+
+def _escape_html(texto: str) -> str:
+    """Escapa caracteres XML/HTML para que ``Paragraph`` de reportlab no
+    los interprete ni falle (p. ej. con `<`, `&` o `>`)."""
+    texto = texto.replace("&", "&amp;")
+    texto = texto.replace("<", "&lt;")
+    texto = texto.replace(">", "&gt;")
+    return texto
 
 
 class DictonotoApp(ctk.CTk):
@@ -58,17 +67,12 @@ class DictonotoApp(ctk.CTk):
             self.config.get("recording", "auto_quick_transcription", True)
         )
         self.recorder.on_quick_fragment = self._on_quick_fragment
-        self.recorder.on_sentence_complete = self._on_sentence_complete
         self.recorder.on_volume_level = self._on_volume_level
 
         # Estado de navegación
         self.current_book: Book | None = None
         self.current_chapter = None
         self.chapter_view: ChapterView | None = None
-
-        # Marca de hasta dónde se ha enviado texto bruto a la IA, para
-        # que cada bloque (desde la última pausa larga) se procese una vez.
-        self._ai_marker = 0
 
         # Hilo de trabajo para transcripciones (evita congelar la UI)
         self.work_queue = []
@@ -186,6 +190,8 @@ class DictonotoApp(ctk.CTk):
             self.current_chapter,
             on_toggle_record=self._toggle_record,
             on_full_transcription=self._run_full_transcription,
+            on_export=self._exportar_md,
+            on_export_pdf=self._exportar_pdf,
             on_save=self._guardar_actual,
             on_back=self._open_book,
         )
@@ -277,7 +283,6 @@ class DictonotoApp(ctk.CTk):
     def _open_chapter(self, cap):
         self.current_chapter = cap
         self.transcriber.reset_context()  # nuevo capítulo: contexto limpio
-        self._ai_marker = 0  # nueva marca de hasta dónde se formateó con IA
         self._show_chapter_view()
 
     def _guardar_actual(self):
@@ -386,15 +391,13 @@ class DictonotoApp(ctk.CTk):
             audio = self.recorder.stop()
             residual = self.recorder.pop_residual_fragment()
             if len(residual) >= self.recorder.samplerate:
-                # Primer transcribe el tramo residual (en vivo)…
+                # Transcripción local del tramo residual que quedó sin pausa.
                 self._enqueue_work(self._transcibe_rapida, residual)
             else:
                 # Sin audio residual relevante.
                 self.after(0, lambda: self.chapter_view.set_status(
                     "✓ Grabación detenida"
                 ))
-            # …y después formatea con IA el bloque pendiente (si lo hay).
-            self._enqueue_work(self._formatear_bloque_ia)
         except Exception as e:
             self.chapter_view.set_status(f"Error: {e}")
 
@@ -435,8 +438,8 @@ class DictonotoApp(ctk.CTk):
         """Transcribe un fragmento (Whisper local) y actualiza la hoja bruta.
 
         Este método corre en el hilo de trabajo y NO llama a la IA: solo
-        alimenta el texto bruto en vivo. La IA se invoca aparte cuando se
-        cierra un bloque por pausa larga (ver _on_sentence_complete).
+        alimenta el texto bruto en vivo. El formateo con IA se hace al
+        pulsar «Transcripción completa» (ver _run_full_transcription).
         """
         try:
             texto = self.transcriber.transcribe(fragmento)
@@ -456,58 +459,9 @@ class DictonotoApp(ctk.CTk):
         )
         self.after(0, self._refresh_raw_ui)
 
-    def _on_sentence_complete(self, pendiente: bool = True):
-        """Pausa larga: encola el formateo con IA del bloque bruto pendiente."""
-        self._enqueue_work(self._formatear_bloque_ia)
-
-    def _formatear_bloque_ia(self):
-        """Formatea con la IA el bloque bruto nuevo (desde la última pausa).
-
-        Se envía únicamente el tramo de texto bruto acumulado desde la
-        última vez que se formateó con IA (marcado por self._ai_marker),
-        de modo que cada bloque pausa a pausa se procese una sola vez.
-        """
-        if self.current_chapter is None:
-            return
-        if not self.config.get("ai", "api_key"):
-            # Sin IA configurada: nada que formatear (se conserva el bruto).
-            return
-
-        bruto = self.current_chapter.raw_text
-        bloque = bruto[self._ai_marker:].strip()
-        if not bloque:
-            return
-
-        try:
-            self.ai.quick_transcription(self.current_chapter, bloque)
-            # Avanza la marca: este bloque ya se formateó
-            self._ai_marker = len(bruto)
-            self.after(0, self._refresh_chapter_ui_after_quick)
-        except Exception as e:
-            # Si la IA falla, conservamos el texto bruto.
-            self.after(0, lambda e=e: self._mostrar_error(str(e)))
-
     def _refresh_raw_ui(self):
         if self.chapter_view:
             self.chapter_view.sync_after_recording()
-
-    def _refresh_chapter_text_ui(self):
-        if self.chapter_view:
-            self.chapter_view.transcribed_box.configure(state="normal")
-            self.chapter_view.transcribed_box.delete("1.0", "end")
-            self.chapter_view.transcribed_box.insert(
-                "1.0", self.current_chapter.transcribed_text
-            )
-            self.chapter_view.transcribed_box.configure(state="normal")
-
-    def _refresh_chapter_ui_after_quick(self):
-        if self.chapter_view:
-            self.chapter_view.transcribed_box.delete("1.0", "end")
-            self.chapter_view.transcribed_box.insert(
-                "1.0", self.current_chapter.transcribed_text
-            )
-            self.chapter_view.sync_sections()
-            self.chapter_view.set_status("• Se actualizó el cuerpo")
 
     # ------------------------------------------------------------------
     def _run_full_transcription(self):
@@ -535,12 +489,254 @@ class DictonotoApp(ctk.CTk):
 
     def _refresh_chapter_after_full(self):
         if self.chapter_view:
-            self.chapter_view.transcribed_box.delete("1.0", "end")
-            self.chapter_view.transcribed_box.insert(
-                "1.0", self.current_chapter.transcribed_text
+            self.chapter_view.set_transcribed_text(
+                self.current_chapter.transcribed_text
             )
             self.chapter_view.sync_sections()
             self.chapter_view.set_status("✓ Transcripción completa lista")
+
+    # ==================================================================
+    # Exportación a Markdown
+    # ==================================================================
+    def _exportar_md(self):
+        """Exporta los 4 sectores del capítulo a un único archivo .md.
+
+        El archivo se guarda en ``data/exports`` con el nombre
+        ``[Libro - Capítulo].md`` y contiene las secciones Resumen,
+        Datos importantes, Glosario y Cuerpo.
+        """
+        if self.chapter_view:
+            self.chapter_view.persist_from_ui()
+        if self.current_book is None or self.current_chapter is None:
+            self.chapter_view.set_status("⚠ No hay capítulo para exportar")
+            return
+
+        nombre_libro = self.current_book.name
+        nombre_capitulo = self.current_chapter.title
+        ch = self.current_chapter
+
+        partes = [
+            f"# {nombre_capitulo}",
+            f"**Libro:** {nombre_libro}",
+            "",
+            "## Resumen",
+            ch.sectors.get("resumen", "").strip() or "_Sin contenido_",
+            "",
+            "## Datos importantes",
+            ch.sectors.get("datos_importantes", "").strip() or "_Sin contenido_",
+            "",
+            "## Glosario",
+            ch.sectors.get("glosario", "").strip() or "_Sin contenido_",
+            "",
+            "## Cuerpo",
+            ch.transcribed_text.strip() or "_Sin contenido_",
+            "",
+        ]
+        contenido = "\n".join(partes)
+
+        import os
+        os.makedirs("data/exports", exist_ok=True)
+        nombre_seguro = (
+            "".join(c for c in f"[{nombre_libro} - {nombre_capitulo}]"
+                    if c not in '\\/:*?"<>|')
+            or "[Capítulo]"
+        )
+        ruta = os.path.join("data/exports", f"{nombre_seguro}.md")
+        with open(ruta, "w", encoding="utf-8") as f:
+            f.write(contenido)
+
+        self.chapter_view.set_status(f"✓ Exportado: {nombre_seguro}.md")
+
+    def _exportar_pdf(self):
+        """Exporta los sectores del capítulo a un archivo PDF formateado.
+
+        Genera un documento PDF (en ``data/exports``) con el título del
+        capítulo, el libro y las secciones Resumen, Datos importantes,
+        Glosario y Cuerpo, interpretando el Markdown para que no aparezcan
+        los marcadores crudos (``*``, ``#``, etc.).
+        """
+        if self.chapter_view:
+            self.chapter_view.persist_from_ui()
+        if self.current_book is None or self.current_chapter is None:
+            self.chapter_view.set_status("⚠ No hay capítulo para exportar")
+            return
+
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.lib import colors
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.lib.enums import TA_LEFT
+        from reportlab.platypus import (
+            SimpleDocTemplate,
+            Paragraph,
+            HRFlowable,
+        )
+        import markdown
+
+        nombre_libro = self.current_book.name
+        nombre_capitulo = self.current_chapter.title
+        ch = self.current_chapter
+
+        import os
+        os.makedirs("data/exports", exist_ok=True)
+        nombre_seguro = (
+            "".join(c for c in f"[{nombre_libro} - {nombre_capitulo}]"
+                    if c not in '\\/:*?"<>|')
+            or "[Capítulo]"
+        )
+        ruta = os.path.join("data/exports", f"{nombre_seguro}.pdf")
+
+        estilos = {
+            "titulo": ParagraphStyle(
+                "titulo", fontName="Helvetica-Bold", fontSize=20,
+                leading=24, textColor=colors.HexColor("#5a4bd1"),
+                spaceAfter=4,
+            ),
+            "libro": ParagraphStyle(
+                "libro", fontName="Helvetica", fontSize=11,
+                leading=14, textColor=colors.HexColor("#666666"),
+                spaceAfter=10,
+            ),
+            "h2": ParagraphStyle(
+                "h2", fontName="Helvetica-Bold", fontSize=14,
+                leading=18, textColor=colors.HexColor("#1e1e1e"),
+                spaceBefore=12, spaceAfter=5,
+            ),
+            "h1": ParagraphStyle(
+                "h1", fontName="Helvetica-Bold", fontSize=15,
+                leading=19, textColor=colors.HexColor("#333333"),
+                spaceBefore=10, spaceAfter=5,
+            ),
+            "h2i": ParagraphStyle(
+                "h2i", fontName="Helvetica-Bold", fontSize=13,
+                leading=17, textColor=colors.HexColor("#444444"),
+                spaceBefore=10, spaceAfter=5,
+            ),
+            "h3": ParagraphStyle(
+                "h3", fontName="Helvetica-Bold", fontSize=12,
+                leading=15, textColor=colors.HexColor("#555555"),
+                spaceBefore=8, spaceAfter=4,
+            ),
+            "cuerpo": ParagraphStyle(
+                "cuerpo", fontName="Helvetica", fontSize=11,
+                leading=15, textColor=colors.HexColor("#333333"),
+                alignment=TA_LEFT, spaceAfter=8,
+            ),
+            "lista": ParagraphStyle(
+                "lista", fontName="Helvetica", fontSize=11,
+                leading=15, textColor=colors.HexColor("#333333"),
+                alignment=TA_LEFT, spaceAfter=2, leftIndent=8,
+            ),
+        }
+
+        def md_a_bloques(texto: str):
+            """Convierte Markdown en una lista de bloques ``(tipo, html)``.
+
+            Divide el texto en bloques top-level (párrafos, encabezados y
+            grupos de listas) separados por líneas en blanco, y convierte
+            cada bloque por separado con ``markdown`` para que se respeten
+            los saltos entre párrafos y títulos. ``tipo`` indica el estilo
+            que debe aplicarse: ``parr``, ``h1``, ``h2``, ``h3`` o ``lista``.
+            """
+            texto = texto.strip()
+            if not texto:
+                return [("parr", "<i>Sin contenido</i>")]
+
+            bloques = []
+            # Dividir en chunks separados por una o más líneas en blanco
+            import re as _re
+            trozos = _re.split(r"\n\s*\n", texto)
+
+            for trozo in trozos:
+                lineas = trozo.splitlines()
+                if not lineas:
+                    continue
+                primera = lineas[0].strip()
+
+                # --- Encabezados ---
+                enc = _re.match(r"^(#{1,6})\s+(.*)$", primera)
+                if enc and len(lineas) == 1:
+                    nivel = len(enc.group(1))
+                    titulo_html = markdown.markdown(
+                        enc.group(2).strip()
+                    ).strip()
+                    # Elimina el <p> envolvente que añade markdown
+                    titulo_html = (
+                        titulo_html.replace("<p>", "")
+                        .replace("</p>", "")
+                    )
+                    if nivel == 1:
+                        bloques.append(("h1", titulo_html))
+                    elif nivel == 2:
+                        bloques.append(("h2i", titulo_html))
+                    else:  # nivel 3+
+                        bloques.append(("h3", titulo_html))
+                    continue
+
+                # --- Listas (bloque que empieza con -, * o 1.) ---
+                if _re.match(r"^\s*([-*+]|\d+\.)\s+", primera):
+                    html = markdown.markdown(trozo, extensions=["extra"])
+                    # Convierte <li> en viñetas con salto de línea
+                    html = html.replace("<ul>", "")
+                    html = html.replace("</ul>", "")
+                    html = html.replace("<ol>", "")
+                    html = html.replace("</ol>", "")
+                    html = html.replace("<li>", "\u2022&nbsp; ")
+                    html = html.replace("</li>", "<br/>")
+                    # Cada <p> interno se limpia (el Paragraph da el estilo)
+                    html = html.replace("<p>", "").replace("</p>", "")
+                    bloques.append(("lista", html))
+                    continue
+
+                # --- Párrafo normal ---
+                html = markdown.markdown(trozo, extensions=["extra"])
+                html = html.replace("<p>", "").replace("</p>", "")
+                bloques.append(("parr", html))
+
+            return bloques
+
+        # Funciones de renderizado por tipo de bloque
+        def render_bbloque(tipo, html):
+            if tipo == "h1":
+                return Paragraph(html or "&nbsp;", estilos["h1"])
+            if tipo == "h2i":
+                return Paragraph(html or "&nbsp;", estilos["h2i"])
+            if tipo == "h3":
+                return Paragraph(html or "&nbsp;", estilos["h3"])
+            if tipo == "lista":
+                return Paragraph(html or "&nbsp;", estilos["lista"])
+            return Paragraph(html or "&nbsp;", estilos["cuerpo"])
+
+        doc = SimpleDocTemplate(
+            ruta, pagesize=A4,
+            rightMargin=20 * mm, leftMargin=20 * mm,
+            topMargin=18 * mm, bottomMargin=18 * mm,
+        )
+
+        historia = []
+        historia.append(Paragraph(
+            _escape_html(nombre_capitulo), estilos["titulo"]
+        ))
+        historia.append(Paragraph(
+            _escape_html(f"Libro: {nombre_libro}"), estilos["libro"]
+        ))
+        historia.append(HRFlowable(
+            width="100%", thickness=1, color=colors.HexColor("#c9c9c9")
+        ))
+
+        secciones = [
+            ("Resumen", ch.sectors.get("resumen", "")),
+            ("Datos importantes", ch.sectors.get("datos_importantes", "")),
+            ("Glosario", ch.sectors.get("glosario", "")),
+            ("Cuerpo", ch.transcribed_text),
+        ]
+        for titulo, contenido in secciones:
+            historia.append(Paragraph(_escape_html(titulo), estilos["h2"]))
+            for tipo, html in md_a_bloques(contenido):
+                historia.append(render_bbloque(tipo, html))
+
+        doc.build(historia)
+        self.chapter_view.set_status(f"✓ Exportado: {nombre_seguro}.pdf")
 
     # ==================================================================
     # Cierre

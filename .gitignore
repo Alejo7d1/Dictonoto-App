@@ -19,6 +19,7 @@ config/settings.json
 
 
 data/books/*
+data/exports/*
 !data/books/.gitkeep
 mis_notas_de_clase.md
 borrador_bruto.txt

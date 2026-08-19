@@ -7,11 +7,11 @@ class Chapter:
         
         # Las 2 hojas principales
         self.raw_text = ""         # Hoja 1: Texto bruto (sin limpiar)
-        self.transcribed_text = "" # Hoja 2: Texto limpio / formateado
-        
-        # Los 4 sectores informativos
+        self.transcribed_text = "" # Hoja 2: Texto transcrito (reemplaza al "cuerpo")
+
+        # Sectores informativos (el "cuerpo" ya no existe: el texto
+        # transcrito lo engloba todo, incluidos estos)
         self.sectors = {
-            "cuerpo": "",            # Todo organizado en orden cronológico
             "datos_importantes": "",  # Fechas, tareas, avisos
             "glosario": "",          # Términos y conceptos clave
             "resumen": ""            # Síntesis global (se llena en transcripción completa)

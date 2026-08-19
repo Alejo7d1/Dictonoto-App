@@ -12,7 +12,7 @@ DEFAULT_CONFIG = {
         "system_prompt": "Eres un asistente académico experto. Transcribe y organiza apuntes de clases de forma clara en Markdown."
     },
     "recording": {
-        "silence_pause_seconds": 8,
+        "silence_pause_seconds": 6,
         "max_fragment_seconds": 12,
         "auto_quick_transcription": True,
         "whisper_model": "small",

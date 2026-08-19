@@ -6,3 +6,5 @@ customtkinter
 nvidia-cublas-cu12
 nvidia-cuda-runtime-cu12
 nvidia-cudnn-cu12
+reportlab
+markdown

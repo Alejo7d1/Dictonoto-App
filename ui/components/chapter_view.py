@@ -4,10 +4,10 @@ Muestra:
 - Cabecera con el título del capítulo.
 - Dos hojas una a la par de la otra:
     - Hoja 1: texto bruto (sin limpiar), de solo lectura.
-    - Hoja 2: texto transcrito (editable por el usuario).
-- Panel de sectores (resumen, datos importantes, glosario, cuerpo).
-- Controles del grabador (iniciar/detener, transcripción completa) y
-  del guardado.
+    - Hoja 2: el "cuerpo", que se muestra como subventanas (pestañas):
+      Resumen, Datos importantes, Glosario y Cuerpo.
+- Controles del grabador (iniciar/detener, transcripción completa),
+  exportación a Markdown y guardado.
 """
 import customtkinter as ctk
 
@@ -26,6 +26,8 @@ class ChapterView(ctk.CTkFrame):
         chapter: Chapter,
         on_toggle_record=None,   # callable(recording: bool)
         on_full_transcription=None,  # callable()
+        on_export=None,          # callable() - exportar a Markdown
+        on_export_pdf=None,      # callable() - exportar a PDF
         on_save=None,            # callable()
         on_back=None,            # callable()
     ):
@@ -33,6 +35,8 @@ class ChapterView(ctk.CTkFrame):
         self.chapter = chapter
         self.on_toggle_record = on_toggle_record
         self.on_full_transcription = on_full_transcription
+        self.on_export = on_export
+        self.on_export_pdf = on_export_pdf
         self.on_save = on_save
         self.on_back = on_back
         self.is_recording = False
@@ -86,12 +90,26 @@ class ChapterView(ctk.CTkFrame):
         self.vu_bar.pack(side="left", padx=(4, 8))
 
         self.full_btn = ctk.CTkButton(
-            actions, text="⟳  Transcripción completa", width=200,
+            actions, text="⟳  Transcribir", width=200,
             fg_color=ACCENTO, hover_color="#5a4bd1",
             text_color="white", font=ctk.CTkFont(size=13),
             command=lambda: self.on_full_transcription and self.on_full_transcription(),
         )
         self.full_btn.pack(side="left", padx=8)
+
+        ctk.CTkButton(
+            actions, text="⤓ Exportar a .md", width=110,
+            fg_color=PANEL2, hover_color="#3a3a3a",
+            text_color=TEXTO, font=ctk.CTkFont(size=13),
+            command=lambda: self.on_export and self.on_export(),
+        ).pack(side="left", padx=8)
+
+        ctk.CTkButton(
+            actions, text="⤓ Exportar a PDF", width=110,
+            fg_color=PANEL2, hover_color="#3a3a3a",
+            text_color=TEXTO, font=ctk.CTkFont(size=13),
+            command=lambda: self.on_export_pdf and self.on_export_pdf(),
+        ).pack(side="left", padx=8)
 
         self.status_label = ctk.CTkLabel(
             actions, text="", text_color=SUBTEXTO, font=ctk.CTkFont(size=12),
@@ -125,38 +143,20 @@ class ChapterView(ctk.CTkFrame):
             state="disabled",
         )
         self.raw_box.grid(row=1, column=0, sticky="nsew", padx=4)
+        # Rellena la hoja bruta al construir (para que no desaparezca al
+        # volver a abrir el capítulo tras navegar entre vistas).
+        self.raw_box.configure(state="normal")
+        self.raw_box.insert("1.0", self.chapter.raw_text)
+        self.raw_box.configure(state="disabled")
 
-        # Hoja 2: texto transcrito (bloque principal) + sectores
+        # Hoja 2: el cuerpo, mostrado como subventanas (pestañas) de sectores
         ctk.CTkLabel(
-            hojas, text="Texto transcrito (editable)",
+            hojas, text="Cuerpo (Resumen · Datos · Glosario · Cuerpo)",
             font=ctk.CTkFont(size=13, weight="bold"), text_color=SUBTEXTO,
         ).grid(row=0, column=1, sticky="w", padx=4, pady=(0, 4))
 
-        hoja2 = ctk.CTkFrame(hojas, fg_color="transparent")
-        hoja2.grid(row=1, column=1, sticky="nsew", padx=4)
-        hoja2.grid_columnconfigure(0, weight=1)
-        # El texto transcrito es el bloque más grande; los sectores,
-        # debajo, ocupan menos.
-        hoja2.grid_rowconfigure(0, weight=5)
-        hoja2.grid_rowconfigure(1, weight=2)
-
-        self.transcribed_box = ctk.CTkTextbox(
-            hoja2, fg_color=PANEL, text_color=TEXTO,
-            border_width=1, border_color=PANEL2,
-            font=ctk.CTkFont(size=13), wrap="word",
-        )
-        self.transcribed_box.grid(row=0, column=0, sticky="nsew")
-        self.transcribed_box.insert("1.0", self.chapter.transcribed_text)
-
-        ctk.CTkLabel(
-            hoja2, text="Sectores",
-            font=ctk.CTkFont(size=13, weight="bold"), text_color=SUBTEXTO,
-            anchor="w",
-        ).grid(row=1, column=0, sticky="ew", pady=(6, 0))
-
-        self.sectors = SectorsPanel(hoja2, self.chapter)
-        self.sectors.grid(row=2, column=0, sticky="nsew", pady=(4, 0))
-        hoja2.grid_rowconfigure(2, weight=2)
+        self.sectors = SectorsPanel(hojas, self.chapter)
+        self.sectors.grid(row=1, column=1, sticky="nsew", padx=4)
 
     # ------------------------------------------------------------------
     def _back(self):
@@ -214,11 +214,15 @@ class ChapterView(ctk.CTkFrame):
         self.status_label.configure(text=texto)
 
     def sync_sections(self):
-        """Recarga los sectores (tras transcripción rápida/completa)."""
+        """Recarga los sectores (tras la transcripción completa)."""
+        self.sectors.sync_from_chapter()
+
+    def set_transcribed_text(self, texto: str):
+        """Actualiza el texto transcrito (cuerpo) en el capítulo y la UI."""
+        self.chapter.transcribed_text = texto
         self.sectors.sync_from_chapter()
 
     def persist_from_ui(self):
         """Guarda los campos editables hacia el capítulo."""
         self.chapter.title = self.title_entry.get().strip() or self.chapter.title
-        self.chapter.transcribed_text = self.transcribed_box.get("1.0", "end").strip()
         self.sectors.sync_to_chapter()

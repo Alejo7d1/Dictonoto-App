@@ -28,31 +28,35 @@ clases, conferencias y reuniones, y organizar las notas con IA usando tu propia 
   y la reorganiza en sectores, añadiendo detalles omitidos.
 
 ### Sectores de la transcripción
-Cada capítulo organiza la información en 4 sectores:
+Tras la **transcripción completa**, la hoja de texto transcrito muestra
+la nota organizada en secciones Markdown:
 1. **Resumen** — síntesis global (solo aparece tras la transcripción completa).
 2. **Datos importantes** — fechas, tareas, avisos y cifras clave.
 3. **Glosario** — los términos y conceptos abordados.
 4. **Cuerpo** — todo lo mencionado, en orden de mención.
 
+El propio texto transcrito integra estas secciones: no hay un panel de
+pestañas aparte, todo se ve y se edita directamente en la hoja transcrita.
+
 ### Capítulos y Libros
 - **Capítulo**: cada transcripción es un capítulo. Al inicio son 2 hojas
-  en blanco con el botón de grabar y los sectores:
+  en blanco con el botón de grabar:
   - *Hoja 1*: texto bruto (sin limpiar), en vivo.
-  - *Hoja 2*: texto transcrito (editable por el usuario).
+  - *Hoja 2*: texto transcrito (editable), que incluye las secciones.
   - Las dos hojas se muestran una a la par de la otra.
 - **Libro**: conjunto de capítulos. Tiene **nombre, color y descripción**.
 - Los formularios de creación/edición (libros, capítulos y ajustes) son
   **páginas inline**; los diálogos modales quedan reservados **solo para
   alertas** (p. ej. confirmación de borrado).
 
-## 🗂 Estructura del proyecto
+## Estructura del proyecto
 
 ```
 config/           Configuración (IA y grabación) en settings.json
 core/             Servicios: IA, biblioteca, grabación, transcripción
 data/books/       Persistencia de libros en JSON
 models/           Modelos Book y Chapter
-ui/components/    Widgets reutilizables (biblioteca, capítulo, sectores)
+ui/components/    Widgets reutilizables (biblioteca, capítulo)
 ui/views/         Páginas inline (libros, capítulos, ajustes IA)
 ui/dialogs/       Diálogos (reservados solo para alertas)
 main.py           Punto de entrada
@@ -98,11 +102,10 @@ python main.py --test
 1. Crea un **Libro** (formulario inline) con nombre, color y descripción.
 2. Dentro del libro, crea un **Capítulo** y ponle título.
 3. Pulsa **● Grabar** y habla. La hoja *Texto bruto* se irá actualizando
-   en vivo; tras una pausa (o un fragmento largo) el bloque se integra al
-   sector *Cuerpo* formateado por la IA.
+   en vivo (transcripción local).
 4. Al terminar, pulsa **■ Detener**.
 5. Pulsa **⟳ Transcripción completa** para reorganizar toda la nota en
-   los 4 sectores.
-6. El texto de la hoja transcrita (y los sectores) es **editable** y se
-   guarda con el botón **Guardar**.
+   el texto transcrito con sus secciones (Resumen, Datos, Glosario, Cuerpo).
+6. El texto de la hoja transcrita es **editable** y se guarda con el
+   botón **Guardar**.
 
