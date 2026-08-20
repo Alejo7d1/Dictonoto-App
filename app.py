@@ -452,16 +452,20 @@ class DictonotoApp(ctk.CTk):
             return
 
         # --- Hoja izquierda: texto bruto en vivo (siempre local) ---
+        # Prefijamos un espacio separador si ya había texto bruto para no
+        # pegar las frases entre sí.
+        separador = " " if self.current_chapter.raw_text else ""
         self.current_chapter.raw_text = (
-            self.current_chapter.raw_text
-            + (" " if self.current_chapter.raw_text else "")
-            + texto
+            self.current_chapter.raw_text + separador + texto
         )
-        self.after(0, self._refresh_raw_ui)
+        # Insertamos SOLO el texto nuevo en el widget (inserción
+        # incremental) en lugar de reconstruir todo el texto bruto; así la
+        # UI no se ralentiza aunque se acumulen muchas transcripciones.
+        self.after(0, lambda s=separador + texto: self._append_raw_ui(s))
 
-    def _refresh_raw_ui(self):
+    def _append_raw_ui(self, texto_nuevo: str):
         if self.chapter_view:
-            self.chapter_view.sync_after_recording()
+            self.chapter_view.append_raw(texto_nuevo)
 
     # ------------------------------------------------------------------
     def _run_full_transcription(self):

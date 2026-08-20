@@ -12,6 +12,7 @@ Muestra:
 import customtkinter as ctk
 
 from models.chapter import Chapter
+from ui.components.inverted_pager import InvertedRawPager
 from ui.components.sectors_panel import SectorsPanel, TEXTO, SUBTEXTO, PANEL, PANEL2
 
 ACCENTO = "#6c5ce7"
@@ -40,6 +41,11 @@ class ChapterView(ctk.CTkFrame):
         self.on_save = on_save
         self.on_back = on_back
         self.is_recording = False
+        # Longitud del texto bruto ya mostrado en el widget. Permite
+        # insertar solo el fragmento nuevo (en tiempo real) en lugar de
+        # reconstruir todo el texto en cada refresco (evita lentitud
+        # progresiva con más contenido).
+        self._raw_shown_len = 0
 
         self._build()
 
@@ -136,18 +142,12 @@ class ChapterView(ctk.CTkFrame):
             font=ctk.CTkFont(size=13, weight="bold"), text_color=SUBTEXTO,
         ).grid(row=0, column=0, sticky="w", padx=4, pady=(0, 4))
 
-        self.raw_box = ctk.CTkTextbox(
-            hojas, fg_color=PANEL, text_color=TEXTO,
-            border_width=1, border_color=PANEL2,
-            font=ctk.CTkFont(size=13), wrap="word",
-            state="disabled",
-        )
-        self.raw_box.grid(row=1, column=0, sticky="nsew", padx=4)
-        # Rellena la hoja bruta al construir (para que no desaparezca al
-        # volver a abrir el capítulo tras navegar entre vistas).
-        self.raw_box.configure(state="normal")
-        self.raw_box.insert("1.0", self.chapter.raw_text)
-        self.raw_box.configure(state="disabled")
+        # Hoja 1 usa paginación invertida: solo se cargan las últimas
+        # páginas y se va cargando hacia arriba al llegar al tope, además
+        # de sin ajuste de línea (wrap="none") para que el scroll sea
+        # rápido incluso con documentos de miles de palabras.
+        self.raw_pager = InvertedRawPager(hojas, self.chapter.raw_text)
+        self.raw_pager.grid(row=1, column=0, sticky="nsew", padx=4)
 
         # Hoja 2: el cuerpo, mostrado como subventanas (pestañas) de sectores
         ctk.CTkLabel(
@@ -171,15 +171,25 @@ class ChapterView(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Actualización de la UI
     # ------------------------------------------------------------------
+    def append_raw(self, texto_nuevo: str):
+        """Añade texto nuevo al final de la hoja bruta (inserción incremental).
+
+        Usa el pager de paginación invertida, que solo recalcula las
+        últimas páginas visibles y se mantiene pegado al final. Esto
+        mantiene la UI fluida aunque se acumulen muchas transcripciones.
+        """
+        if not texto_nuevo:
+            return
+        self.raw_pager.append_text(texto_nuevo)
+
     def sync_after_recording(self):
-        """Refresca la hoja de texto bruto y los controles."""
-        # Texto bruto (solo lectura)
-        self.raw_box.configure(state="normal")
-        self.raw_box.delete("1.0", "end")
-        self.raw_box.insert("1.0", self.chapter.raw_text)
-        self.raw_box.configure(state="disabled")
-        # Auto-scroll
-        self.raw_box.see("end")
+        """Refresca la hoja de texto bruto (recarga desde el capítulo).
+
+        Se usa cuando el texto pudo cambiar "por fuera" (p. ej. al abrir
+        un capítulo guardado). Para la transcripción en vivo se prefiere
+        `append_raw`, que es mucho más barata.
+        """
+        self.raw_pager.set_text(self.chapter.raw_text)
 
     def set_recording_state(self, recording: bool):
         self.is_recording = recording
