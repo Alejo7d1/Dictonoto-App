@@ -4,9 +4,7 @@ Permite crear/abrir/eliminar libros y gestionar sus capítulos.
 """
 import customtkinter as ctk
 
-from ui.components.chapter_view import (
-    TEXTO, SUBTEXTO, PANEL, PANEL2, ACCENTO,
-)
+from ui.theme import colors
 
 
 class LibraryView(ctk.CTkFrame):
@@ -44,17 +42,17 @@ class LibraryView(ctk.CTkFrame):
         # Encabezado
         ctk.CTkLabel(
             scroll, text="Mi Biblioteca",
-            font=ctk.CTkFont(size=24, weight="bold"), text_color=TEXTO,
+            font=ctk.CTkFont(size=24, weight="bold"), text_color=colors.text_primary,
         ).grid(row=0, column=0, sticky="w", pady=(0, 4))
 
         ctk.CTkLabel(
             scroll, text="Selecciona o crea un libro para empezar a transcribir",
-            font=ctk.CTkFont(size=13), text_color=SUBTEXTO,
+            font=ctk.CTkFont(size=13), text_color=colors.text_secondary,
         ).grid(row=1, column=0, sticky="w", pady=(0, 12))
 
         ctk.CTkButton(
             scroll, text="＋  Nuevo Libro", width=160,
-            fg_color=ACCENTO, hover_color="#5a4bd1", text_color="white",
+            fg_color=colors.accent, hover_color=colors.accent_hover, text_color="white",
             command=lambda: self.on_new_book and self.on_new_book(),
         ).grid(row=2, column=0, sticky="w", pady=(0, 14))
 
@@ -73,14 +71,14 @@ class LibraryView(ctk.CTkFrame):
             ctk.CTkLabel(
                 self.cards_frame,
                 text="Aún no hay libros. Crea el primero con 「＋ Nuevo Libro」.",
-                text_color=SUBTEXTO, font=ctk.CTkFont(size=14),
+                text_color=colors.text_secondary, font=ctk.CTkFont(size=14),
             ).grid(row=0, column=0, sticky="w", pady=20)
             return
 
         for i, libro in enumerate(self.libros):
             card = ctk.CTkFrame(
-                self.cards_frame, fg_color=PANEL,
-                corner_radius=12, border_width=1, border_color=PANEL2,
+                self.cards_frame, fg_color=colors.bg_panel,
+                corner_radius=12, border_width=1, border_color=colors.border,
             )
             card.grid(row=i, column=0, sticky="ew", pady=6)
             card.grid_columnconfigure(1, weight=1)
@@ -88,18 +86,18 @@ class LibraryView(ctk.CTkFrame):
             # Indicador de color
             ctk.CTkLabel(
                 card, text="   ", width=12, fg_color=libro.color_hex,
-                corner_radius=6, text_color=PANEL,
+                corner_radius=6, text_color=colors.bg_panel,
             ).grid(row=0, column=0, rowspan=2, padx=12, pady=12)
 
             # Nombre y descripción
             ctk.CTkLabel(
                 card, text=libro.name,
-                font=ctk.CTkFont(size=16, weight="bold"), text_color=TEXTO,
+                font=ctk.CTkFont(size=16, weight="bold"), text_color=colors.text_primary,
             ).grid(row=0, column=1, sticky="w", padx=6, pady=(10, 0))
 
             ctk.CTkLabel(
                 card, text=libro.description or "Sin descripción",
-                font=ctk.CTkFont(size=12), text_color=SUBTEXTO,
+                font=ctk.CTkFont(size=12), text_color=colors.text_secondary,
                 anchor="w",
             ).grid(row=1, column=1, sticky="w", padx=6, pady=(0, 10))
 
@@ -109,14 +107,14 @@ class LibraryView(ctk.CTkFrame):
 
             ctk.CTkButton(
                 acciones, text=f"{len(libro.chapters)} cap.  ›",
-                width=110, fg_color=ACCENTO, hover_color="#5a4bd1",
+                width=110, fg_color=colors.accent, hover_color=colors.accent_hover,
                 text_color="white",
                 command=lambda l=libro: self.on_open_book and self.on_open_book(l),
             ).pack(side="left", padx=4)
 
             ctk.CTkButton(
                 acciones, text="✎", width=36,
-                fg_color=PANEL2, hover_color="#3a3a3a", text_color=TEXTO,
+                fg_color=colors.bg_panel_light, hover_color="#3a3a3a", text_color=colors.text_primary,
                 command=lambda l=libro: self.on_edit_book and self.on_edit_book(l),
             ).pack(side="left", padx=2)
 

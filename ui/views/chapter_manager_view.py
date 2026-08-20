@@ -1,19 +1,9 @@
-"""Vista de gestión de capítulos dentro de un libro (página inline).
+"""Vista de gestión de capítulos dentro de un libro."""
 
-Se muestra como página dentro de la ventana principal, no como ventana
-modal. Permite crear, abrir y eliminar capítulos.
-"""
 import customtkinter as ctk
-
 from models.book import Book
 from models.chapter import Chapter
-
-BG = "#121212"
-PANEL = "#1e1e1e"
-PANEL2 = "#2a2a2a"
-ACCENTO = "#6c5ce7"
-TEXTO = "#e8e8e8"
-SUBTEXTO = "#9a9a9a"
+from ui.theme import colors, typography, spacing, radius, sizes
 
 
 class ChapterManagerView(ctk.CTkFrame):
@@ -23,11 +13,11 @@ class ChapterManagerView(ctk.CTkFrame):
         self,
         master,
         libro: Book,
-        on_open_chapter=None,  # callable(chapter)
-        on_back=None,          # callable()
-        on_delete=None,        # callable(libro) -> para confirmar/borrar libro
+        on_open_chapter=None,
+        on_back=None,
+        on_delete=None,
     ):
-        super().__init__(master, fg_color=BG)
+        super().__init__(master, fg_color=colors.bg_primary)
         self.libro = libro
         self.on_open_chapter = on_open_chapter
         self.on_back = on_back
@@ -38,96 +28,196 @@ class ChapterManagerView(ctk.CTkFrame):
     # ------------------------------------------------------------------
     def _build(self):
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(1, weight=1)
 
-        # Cabecera
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=14, pady=(10, 4))
-        header.grid_columnconfigure(1, weight=1)
-
-        ctk.CTkButton(
-            header, text="‹ Volver", width=80,
-            fg_color="transparent", hover_color=PANEL2,
-            text_color=TEXTO, command=self._back,
-        ).grid(row=0, column=0, sticky="w")
-
-        ctk.CTkLabel(
-            header, text=f"Capítulos de «{self.libro.name}»",
-            font=ctk.CTkFont(size=18, weight="bold"), text_color=TEXTO,
-        ).grid(row=0, column=1, padx=8)
-
-        ctk.CTkButton(
-            header, text="＋  Nuevo Capítulo", fg_color=ACCENTO,
-            hover_color="#5a4bd1", text_color="white", width=160,
-            command=self._crear_nuevo,
-        ).grid(row=0, column=2, sticky="e")
-
-        # Lista de capítulos
-        self.list_frame = ctk.CTkScrollableFrame(
-            self, fg_color=PANEL, corner_radius=10,
-        )
-        self.list_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=8)
-        self.list_frame.grid_columnconfigure(0, weight=1)
-
-        # Fila inferior (volver a biblioteca)
-        footer = ctk.CTkFrame(self, fg_color="transparent")
-        footer.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 10))
-        ctk.CTkButton(
-            footer, text="‹ Volver a la biblioteca", width=160,
-            fg_color="transparent", hover_color=PANEL2,
-            text_color=SUBTEXTO, command=self._back,
-        ).pack(side="left")
-
+        self._build_header()
+        self._build_chapter_list()
+        self._build_footer()
         self._render_list()
 
     # ------------------------------------------------------------------
+    def _build_header(self):
+        """Cabecera con título y botón de nuevo capítulo."""
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=spacing.md, pady=(spacing.xs, spacing.sm))
+        header.grid_columnconfigure(1, weight=1)
+
+        # Botón volver
+        ctk.CTkButton(
+            header,
+            text="‹ Volver",
+            width=sizes.button_small,
+            fg_color="transparent",
+            hover_color=colors.bg_panel_light,
+            text_color=colors.text_primary,
+            command=self._back,
+            font=typography.body,
+        ).grid(row=0, column=0, sticky="w")
+
+        # Título
+        ctk.CTkLabel(
+            header,
+            text=f"Capítulos de «{self.libro.name}»",
+            font=typography.heading_medium,
+            text_color=colors.text_primary,
+        ).grid(row=0, column=1, padx=spacing.md)
+
+        # Botón nuevo capítulo
+        ctk.CTkButton(
+            header,
+            text="＋ Nuevo Capítulo",
+            fg_color=colors.accent,
+            hover_color=colors.accent_hover,
+            text_color=colors.text_inverse,
+            width=sizes.button_large,
+            font=typography.body,
+            command=self._crear_nuevo,
+        ).grid(row=0, column=2, sticky="e")
+
+    # ------------------------------------------------------------------
+    def _build_chapter_list(self):
+        """Lista scrollable de capítulos."""
+        self.list_frame = ctk.CTkScrollableFrame(
+            self,
+            fg_color=colors.bg_panel,
+            corner_radius=radius.lg,
+        )
+        self.list_frame.grid(row=1, column=0, sticky="nsew", padx=spacing.lg, pady=spacing.md)
+        self.list_frame.grid_columnconfigure(0, weight=1)
+
+    # ------------------------------------------------------------------
+    def _build_footer(self):
+        """Pie de página."""
+        footer = ctk.CTkFrame(self, fg_color="transparent")
+        footer.grid(row=2, column=0, sticky="ew", padx=spacing.lg, pady=(0, spacing.xs))
+
+        ctk.CTkButton(
+            footer,
+            text="‹ Volver a la biblioteca",
+            width=sizes.button_large,
+            fg_color="transparent",
+            hover_color=colors.bg_panel_light,
+            text_color=colors.text_muted,
+            font=typography.body,
+            command=self._back,
+        ).pack(side="left")
+
+        # Contador de capítulos
+        ctk.CTkLabel(
+            footer,
+            text=f"{len(self.libro.chapters)} capítulos",
+            text_color=colors.text_muted,
+            font=typography.caption,
+        ).pack(side="right")
+
+    # ------------------------------------------------------------------
     def _crear_nuevo(self):
-        """Añade un nuevo capítulo con título por defecto (título editable)."""
+        """Crea un nuevo capítulo y lo abre."""
         nuevo = Chapter(title="Nuevo Capítulo")
         self.libro.add_chapter(nuevo)
         self._render_list()
-        # Abre directamente para permitir guardar/editar
+
         if self.on_open_chapter:
             self.on_open_chapter(nuevo)
 
+    # ------------------------------------------------------------------
     def _render_list(self):
+        """Renderiza la lista de capítulos."""
+        # Limpiar
         for w in self.list_frame.winfo_children():
             w.destroy()
 
+        # Mensaje vacío
         if not self.libro.chapters:
-            ctk.CTkLabel(
-                self.list_frame, text="Sin capítulos todavía. Crea uno nuevo.",
-                text_color=SUBTEXTO,
-            ).grid(row=0, column=0, pady=20)
+            self._render_empty_state()
             return
 
+        # Renderizar cada capítulo
         for i, ch in enumerate(self.libro.chapters):
-            row = ctk.CTkFrame(self.list_frame, fg_color=PANEL2, corner_radius=8)
-            row.grid(row=i, column=0, sticky="ew", pady=4, padx=4)
-            row.grid_columnconfigure(0, weight=1)
+            self._render_chapter_row(i, ch)
 
-            ctk.CTkLabel(
-                row, text=ch.title,
-                font=ctk.CTkFont(size=14, weight="bold"), text_color=TEXTO,
-            ).grid(row=0, column=0, sticky="w", padx=12, pady=6)
+    # ------------------------------------------------------------------
+    def _render_empty_state(self):
+        """Muestra mensaje cuando no hay capítulos."""
+        ctk.CTkLabel(
+            self.list_frame,
+            text="📖  Sin capítulos todavía. ¡Crea uno nuevo!",
+            text_color=colors.text_muted,
+            font=typography.body_large,
+        ).grid(row=0, column=0, pady=spacing.xl)
 
-            ctk.CTkLabel(
-                row, text=ch.timestamp,
-                font=ctk.CTkFont(size=11), text_color=SUBTEXTO,
-            ).grid(row=1, column=0, sticky="w", padx=12, pady=(0, 8))
+    # ------------------------------------------------------------------
+    def _render_chapter_row(self, index: int, chapter: Chapter):
+        """Renderiza una fila de capítulo."""
+        row = ctk.CTkFrame(
+            self.list_frame,
+            fg_color=colors.bg_card,
+            corner_radius=radius.md,
+            border_width=1,
+            border_color=colors.bg_panel_light,
+        )
+        row.grid(row=index, column=0, sticky="ew", pady=spacing.sm, padx=spacing.xs)
+        row.grid_columnconfigure(1, weight=1)
 
-            ctk.CTkButton(
-                row, text="Abrir", width=80,
-                fg_color=ACCENTO, hover_color="#5a4bd1", text_color="white",
-                command=lambda c=ch: self._abrir(c),
-            ).grid(row=0, column=1, rowspan=2, padx=6)
+        # Número de capítulo (badge)
+        ctk.CTkLabel(
+            row,
+            text=f"{index + 1}",
+            width=34,
+            height=34,
+            corner_radius=17,
+            fg_color=colors.accent,
+            text_color=colors.text_inverse,
+            font=typography.heading_small,
+        ).grid(row=0, column=0, rowspan=2, padx=(spacing.md, spacing.sm), pady=spacing.md)
 
-            ctk.CTkButton(
-                row, text="🗑", width=40,
-                fg_color="transparent", hover_color="#4a2020",
-                text_color="#e74c3c",
-                command=lambda c=ch: self._eliminar(c),
-            ).grid(row=0, column=2, rowspan=2, padx=6)
+        # Título
+        ctk.CTkLabel(
+            row,
+            text=chapter.title,
+            font=typography.heading_small,
+            text_color=colors.text_primary,
+            anchor="w",
+        ).grid(row=0, column=1, sticky="ew", padx=(0, spacing.sm), pady=(spacing.md, 0))
+
+        # Timestamp
+        ctk.CTkLabel(
+            row,
+            text=f"🕒 {chapter.timestamp}",
+            font=typography.caption,
+            text_color=colors.text_muted,
+            anchor="w",
+        ).grid(row=1, column=1, sticky="ew", padx=(0, spacing.sm), pady=(0, spacing.md))
+
+        # Botones de acción
+        self._render_row_buttons(row, chapter)
+
+    # ------------------------------------------------------------------
+    def _render_row_buttons(self, row: ctk.CTkFrame, chapter: Chapter):
+        """Renderiza los botones de acción de una fila."""
+        # Botón Abrir
+        ctk.CTkButton(
+            row,
+            text="Abrir",
+            width=sizes.button_small,
+            fg_color=colors.accent,
+            hover_color=colors.accent_hover,
+            text_color=colors.text_inverse,
+            font=typography.body_small,
+            command=lambda c=chapter: self._abrir(c),
+        ).grid(row=0, column=2, rowspan=2, padx=spacing.sm, pady=spacing.md)
+
+        # Botón Eliminar
+        ctk.CTkButton(
+            row,
+            text="🗑",
+            width=40,
+            fg_color="transparent",
+            hover_color="#3a1a1a",
+            text_color=colors.danger,
+            font=typography.body,
+            command=lambda c=chapter: self._eliminar(c),
+        ).grid(row=0, column=3, rowspan=2, padx=(0, spacing.md), pady=spacing.md)
 
     # ------------------------------------------------------------------
     def _back(self):
